@@ -1,0 +1,37 @@
+{
+  "name": "ai-powered-blogger-automation",
+  "version": "1.0.0",
+  "description": "Hands-free backend pipeline that generates articles using Gemini AI and auto-publishes to Blogger.com every hour",
+  "main": "src/app.js",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js",
+    "get-token": "node scripts/getRefreshToken.js",
+    "client:dev": "npm run dev --prefix frontend",
+    "client:build": "npm run build --prefix frontend",
+    "build": "npm run client:build"
+  },
+  "keywords": [
+    "blogger",
+    "automation",
+    "gemini",
+    "ai",
+    "content-generation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@google/genai": "^1.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.0",
+    "googleapis": "^144.0.0",
+    "mongoose": "^8.8.0",
+    "node-cron": "^3.0.3",
+    "open": "^10.1.0",
+    "winston": "^3.17.0"
+  }
+}
