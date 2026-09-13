@@ -86,7 +86,27 @@ async function markFailed(article, error) {
   });
 }
 
-async function run() {
+let autoRetryTimer = null;
+
+function triggerAutoRetry(delayMs = 15000) {
+  if (autoRetryTimer) {
+    clearTimeout(autoRetryTimer);
+  }
+  logger.info(`[AUTO-RETRY] Scheduling automatic retry in ${delayMs / 1000}s...`);
+  autoRetryTimer = setTimeout(async () => {
+    autoRetryTimer = null;
+    if (!isPipelineRunning) {
+      logger.info('[AUTO-RETRY] Launching automatic retry execution...');
+      try {
+        await run({ allowAutoRetry: true });
+      } catch (err) {
+        logger.error(`[AUTO-RETRY] Execution failed: ${err.message}`);
+      }
+    }
+  }, delayMs);
+}
+
+async function run(options = {}) {
   if (isPipelineRunning) {
     const error = new Error('Pipeline run is already in progress');
     error.code = 'PIPELINE_BUSY';
@@ -105,6 +125,16 @@ async function run() {
 
     if (articleToPublish) {
       logger.info(`Claimed recoverable article ${articleToPublish._id} for publishing.`);
+      if (!articleToPublish.content || articleToPublish.content.includes('Content generation failed')) {
+        logger.info(`Article ${articleToPublish._id} requires content generation. Calling AI...`);
+        const generatedContent = await aiService.generateArticle();
+        articleToPublish.title = generatedContent.title;
+        articleToPublish.content = generatedContent.content;
+        articleToPublish.topic = generatedContent.topic;
+        articleToPublish.tags = generatedContent.tags;
+        await articleToPublish.save();
+      }
+
       pipelineEmitter.emit(EVENTS.ARTICLE_PUBLISHING, {
         articleId: articleToPublish._id,
         title: articleToPublish.title
@@ -154,9 +184,15 @@ async function run() {
 
   } catch (error) {
     logger.error(`Outcome: Failed! Pipeline error: ${error.message}`);
+    let shouldAutoRetry = false;
+    let targetArticle = articleToPublish;
+
     if (articleToPublish && articleToPublish._id) {
       await markFailed(articleToPublish, error);
       logger.info(`Article ${articleToPublish._id} status updated to FAILED. Retry count: ${articleToPublish.retryCount}`);
+      if (articleToPublish.retryCount < MAX_RETRIES) {
+        shouldAutoRetry = true;
+      }
     } else {
       try {
         const failedRecord = new Article({
@@ -169,6 +205,8 @@ async function run() {
           retryCount: 1
         });
         await failedRecord.save();
+        targetArticle = failedRecord;
+        shouldAutoRetry = true;
         pipelineEmitter.emit(EVENTS.ARTICLE_FAILED, {
           articleId: failedRecord._id,
           title: failedRecord.title,
@@ -178,6 +216,18 @@ async function run() {
         logger.error(`Could not save failed article record: ${saveErr.message}`);
       }
     }
+
+    if (shouldAutoRetry && options.allowAutoRetry !== false) {
+      const retryDelayMs = 15000;
+      pipelineEmitter.emit(EVENTS.ARTICLE_RETRY, {
+        articleId: targetArticle?._id,
+        title: targetArticle?.title || 'Article',
+        delaySeconds: retryDelayMs / 1000,
+        message: `Auto-retry scheduled in ${retryDelayMs / 1000}s (Attempt ${targetArticle?.retryCount || 1}/${MAX_RETRIES})`
+      });
+      triggerAutoRetry(retryDelayMs);
+    }
+
     throw error;
   } finally {
     isPipelineRunning = false;

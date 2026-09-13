@@ -117,6 +117,8 @@ export default function App() {
               addToast(`Live Update: Publishing "${data.title || 'Article'}" to Blogger...`, 'info', 5000);
             } else if (data.type === 'article:failed') {
               addToast(`Live Update: Pipeline failure: ${data.error || 'Unknown error'}`, 'error', 7000);
+            } else if (data.type === 'article:retry') {
+              addToast(`Auto-Retry: ${data.message || 'Retrying publication...'}`, 'info', 8000);
             }
           } catch {
             // keepalive or non-json message
