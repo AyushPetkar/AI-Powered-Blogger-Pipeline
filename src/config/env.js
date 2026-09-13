@@ -27,6 +27,6 @@ module.exports = {
   GOOGLE_REFRESH_TOKEN: process.env.GOOGLE_REFRESH_TOKEN,
   BLOGGER_BLOG_ID: process.env.BLOGGER_BLOG_ID,
   PORT: process.env.PORT || 3000,
-  CRON_SCHEDULE: process.env.CRON_SCHEDULE || '0 * * * *',
+  CRON_SCHEDULE: process.env.CRON_SCHEDULE || '*/2 * * * *',
   ADMIN_API_KEY: process.env.ADMIN_API_KEY || null
 };
