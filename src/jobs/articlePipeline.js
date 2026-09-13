@@ -157,6 +157,26 @@ async function run() {
     if (articleToPublish && articleToPublish._id) {
       await markFailed(articleToPublish, error);
       logger.info(`Article ${articleToPublish._id} status updated to FAILED. Retry count: ${articleToPublish.retryCount}`);
+    } else {
+      try {
+        const failedRecord = new Article({
+          title: 'Article Generation (Failed)',
+          content: '<p>Content generation failed before drafting completed.</p>',
+          topic: 'Auto Generation',
+          tags: ['Generation Failed'],
+          status: 'FAILED',
+          errorMessage: error.message,
+          retryCount: 1
+        });
+        await failedRecord.save();
+        pipelineEmitter.emit(EVENTS.ARTICLE_FAILED, {
+          articleId: failedRecord._id,
+          title: failedRecord.title,
+          error: error.message
+        });
+      } catch (saveErr) {
+        logger.error(`Could not save failed article record: ${saveErr.message}`);
+      }
     }
     throw error;
   } finally {
