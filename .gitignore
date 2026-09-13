@@ -5,3 +5,4 @@ logs/
 credentials.json
 token.json
 *.articles.json
+scratch/

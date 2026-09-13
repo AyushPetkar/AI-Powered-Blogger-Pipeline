@@ -48,50 +48,73 @@ Return ONLY a valid JSON object matching this schema:
   "topic": "A short summary of the specific topic covered"
 }`;
 
-    logger.info('Calling Gemini API to generate article content...');
+    const candidateModels = [
+      config.GEMINI_MODEL,
+      'gemini-2.5-flash-lite',
+      'gemini-3.5-flash-lite',
+      'gemini-flash-latest'
+    ].filter((v, i, a) => v && a.indexOf(v) === i);
 
-    const callGemini = async () => {
-      const response = await ai.models.generateContent({
-        model: config.GEMINI_MODEL,
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          responseJsonSchema: {
-            type: 'object',
-            properties: {
-              title: {
-                type: 'string',
-                description: 'SEO-friendly article title'
-              },
-              content: {
-                type: 'string',
-                description: 'Complete article body in HTML, around 500-650 words'
-              },
-              tags: {
-                type: 'array',
-                items: {
-                  type: 'string'
-                }
-              },
-              topic: {
-                type: 'string',
-                description: 'Short summary of the specific topic covered'
+    let response = null;
+    let lastError = null;
+
+    for (const modelName of candidateModels) {
+      try {
+        logger.info(`Attempting AI article generation with model: ${modelName}`);
+        const callGemini = async () => {
+          return await ai.models.generateContent({
+            model: modelName,
+            contents: prompt,
+            config: {
+              responseMimeType: 'application/json',
+              responseJsonSchema: {
+                type: 'object',
+                properties: {
+                  title: {
+                    type: 'string',
+                    description: 'SEO-friendly article title'
+                  },
+                  content: {
+                    type: 'string',
+                    description: 'Complete article body in HTML, around 500-650 words'
+                  },
+                  tags: {
+                    type: 'array',
+                    items: {
+                      type: 'string'
+                    }
+                  },
+                  topic: {
+                    type: 'string',
+                    description: 'Short summary of the specific topic covered'
+                  }
+                },
+                required: [
+                  'title',
+                  'content',
+                  'tags',
+                  'topic'
+                ],
+                additionalProperties: false
               }
-            },
-            required: [
-              'title',
-              'content',
-              'tags',
-              'topic'
-            ],
-            additionalProperties: false
-          }
-        }
-      });
-      return response;
-    };
+            }
+          });
+        };
 
-    const response = await withRetry(callGemini, { maxRetries: 3, baseDelay: 2000 });
+        response = await withRetry(callGemini, { maxRetries: 2, baseDelay: 1500 });
+        if (response && response.text) {
+          logger.info(`AI generation succeeded with model: ${modelName}`);
+          break;
+        }
+      } catch (err) {
+        lastError = err;
+        logger.warn(`Model ${modelName} failed (${err.status || err.message}). Trying next fallback model...`);
+      }
+    }
+
+    if (!response || !response.text) {
+      throw lastError || new Error('All Gemini model fallbacks failed to generate content');
+    }
     let responseText = response && response.text ? response.text.trim() : '';
 
     // Strip markdown code fences if model enclosed JSON in ```json ... ```
