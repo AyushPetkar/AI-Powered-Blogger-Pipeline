@@ -19,6 +19,26 @@ function publishableFilter(extraFilter = {}) {
 }
 
 async function resetStalePublishingArticles() {
+  try {
+    const badArticles = await Article.find({ title: /Article Generation \(Failed\)/i });
+    for (const bad of badArticles) {
+      if (bad.bloggerPostId) {
+        try {
+          await bloggerService.deletePost(bad.bloggerPostId);
+          logger.info(`Deleted bad placeholder post ${bad.bloggerPostId} from Blogger`);
+        } catch (err) {
+          logger.warn(`Could not delete placeholder post from Blogger: ${err.message}`);
+        }
+      }
+    }
+    if (badArticles.length > 0) {
+      await Article.deleteMany({ title: /Article Generation \(Failed\)/i });
+      logger.info(`Cleaned up ${badArticles.length} invalid placeholder article(s) from database`);
+    }
+  } catch (cleanErr) {
+    logger.warn(`Placeholder cleanup error: ${cleanErr.message}`);
+  }
+
   const staleBefore = new Date(Date.now() - PUBLISHING_STALE_AFTER_MS);
   const result = await Article.updateMany(
     {
@@ -169,6 +189,12 @@ async function run(options = {}) {
       });
     }
 
+    if (!articleToPublish.content || articleToPublish.content.length < 150 || articleToPublish.title.includes('(Failed)')) {
+      logger.warn(`Article ${articleToPublish._id} has invalid content. Deleting placeholder record.`);
+      await Article.deleteOne({ _id: articleToPublish._id });
+      throw new Error('Skipped invalid placeholder article.');
+    }
+
     logger.info(`Publishing article ${articleToPublish._id} to Blogger...`);
     const publishedPost = await bloggerService.publishPost(
       articleToPublish.title,
@@ -185,7 +211,6 @@ async function run(options = {}) {
   } catch (error) {
     logger.error(`Outcome: Failed! Pipeline error: ${error.message}`);
     let shouldAutoRetry = false;
-    let targetArticle = articleToPublish;
 
     if (articleToPublish && articleToPublish._id) {
       await markFailed(articleToPublish, error);
@@ -194,36 +219,20 @@ async function run(options = {}) {
         shouldAutoRetry = true;
       }
     } else {
-      try {
-        const failedRecord = new Article({
-          title: 'Article Generation (Failed)',
-          content: '<p>Content generation failed before drafting completed.</p>',
-          topic: 'Auto Generation',
-          tags: ['Generation Failed'],
-          status: 'FAILED',
-          errorMessage: error.message,
-          retryCount: 1
-        });
-        await failedRecord.save();
-        targetArticle = failedRecord;
-        shouldAutoRetry = true;
-        pipelineEmitter.emit(EVENTS.ARTICLE_FAILED, {
-          articleId: failedRecord._id,
-          title: failedRecord.title,
-          error: error.message
-        });
-      } catch (saveErr) {
-        logger.error(`Could not save failed article record: ${saveErr.message}`);
-      }
+      shouldAutoRetry = true;
+      pipelineEmitter.emit(EVENTS.ARTICLE_FAILED, {
+        title: 'AI Content Generation',
+        error: error.message
+      });
     }
 
     if (shouldAutoRetry && options.allowAutoRetry !== false) {
       const retryDelayMs = 15000;
       pipelineEmitter.emit(EVENTS.ARTICLE_RETRY, {
-        articleId: targetArticle?._id,
-        title: targetArticle?.title || 'Article',
+        articleId: articleToPublish?._id,
+        title: articleToPublish?.title || 'Article Generation',
         delaySeconds: retryDelayMs / 1000,
-        message: `Auto-retry scheduled in ${retryDelayMs / 1000}s (Attempt ${targetArticle?.retryCount || 1}/${MAX_RETRIES})`
+        message: `Auto-retry scheduled in ${retryDelayMs / 1000}s (Retrying with AI)...`
       });
       triggerAutoRetry(retryDelayMs);
     }

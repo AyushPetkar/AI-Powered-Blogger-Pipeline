@@ -39,4 +39,21 @@ async function publishPost(title, content, tags) {
   }
 }
 
-module.exports = { publishPost };
+async function deletePost(postId) {
+  const auth = getOAuth2Client();
+  const blogger = google.blogger({ version: 'v3', auth });
+
+  try {
+    await blogger.posts.delete({
+      blogId: config.BLOGGER_BLOG_ID,
+      postId,
+    });
+    logger.info(`Successfully deleted post ${postId} from Blogger`);
+    return true;
+  } catch (error) {
+    logger.error(`Failed to delete post ${postId} from Blogger: ${error.message}`);
+    return false;
+  }
+}
+
+module.exports = { publishPost, deletePost };
