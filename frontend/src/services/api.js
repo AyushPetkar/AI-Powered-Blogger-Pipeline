@@ -43,7 +43,7 @@ async function parseMutationResponse(res, fallbackMessage) {
 }
 
 export async function fetchStats() {
-  const res = await fetch(`${BASE_URL}/api/stats`);
+  const res = await fetch(`${BASE_URL}/api/stats`, { cache: 'no-store' });
   if (!res.ok) {
     throw new Error(`Failed to fetch stats: ${res.statusText}`);
   }
@@ -51,7 +51,7 @@ export async function fetchStats() {
 }
 
 export async function fetchHealth() {
-  const res = await fetch(`${BASE_URL}/health`);
+  const res = await fetch(`${BASE_URL}/health`, { cache: 'no-store' });
   if (!res.ok) {
     throw new Error(`Failed to fetch health: ${res.statusText}`);
   }
@@ -59,7 +59,7 @@ export async function fetchHealth() {
 }
 
 export async function fetchConfig() {
-  const res = await fetch(`${BASE_URL}/api/config`);
+  const res = await fetch(`${BASE_URL}/api/config`, { cache: 'no-store' });
   if (!res.ok) {
     throw new Error(`Failed to fetch config: ${res.statusText}`);
   }
@@ -73,7 +73,7 @@ export async function fetchArticles({ status = 'ALL', search = '', limit = 50 } 
   if (limit) params.set('limit', limit.toString());
 
   const query = params.toString() ? `?${params.toString()}` : '';
-  const res = await fetch(`${BASE_URL}/articles${query}`);
+  const res = await fetch(`${BASE_URL}/articles${query}`, { cache: 'no-store' });
   if (!res.ok) {
     throw new Error(`Failed to fetch articles: ${res.statusText}`);
   }
@@ -81,7 +81,7 @@ export async function fetchArticles({ status = 'ALL', search = '', limit = 50 } 
 }
 
 export async function fetchArticleById(id) {
-  const res = await fetch(`${BASE_URL}/articles/${id}`);
+  const res = await fetch(`${BASE_URL}/articles/${id}`, { cache: 'no-store' });
   if (!res.ok) {
     throw new Error(`Failed to fetch article details: ${res.statusText}`);
   }

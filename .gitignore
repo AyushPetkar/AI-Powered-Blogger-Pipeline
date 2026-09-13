@@ -4,3 +4,4 @@ logs/
 *.log
 credentials.json
 token.json
+*.articles.json

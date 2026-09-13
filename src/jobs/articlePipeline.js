@@ -2,6 +2,7 @@ const aiService = require('../services/aiService');
 const bloggerService = require('../services/bloggerService');
 const Article = require('../models/Article');
 const logger = require('../utils/logger');
+const { pipelineEmitter, EVENTS } = require('../utils/pipelineEvents');
 
 let isPipelineRunning = false;
 const MAX_RETRIES = 3;
@@ -62,6 +63,13 @@ async function markPublished(article, publishedPost) {
   article.publishedAt = new Date();
   article.errorMessage = null;
   await article.save();
+
+  pipelineEmitter.emit(EVENTS.ARTICLE_PUBLISHED, {
+    articleId: article._id,
+    title: article.title,
+    bloggerUrl: publishedPost.url,
+    publishedAt: article.publishedAt
+  });
 }
 
 async function markFailed(article, error) {
@@ -69,6 +77,13 @@ async function markFailed(article, error) {
   article.retryCount = (article.retryCount || 0) + 1;
   article.errorMessage = error.message;
   await article.save();
+
+  pipelineEmitter.emit(EVENTS.ARTICLE_FAILED, {
+    articleId: article._id,
+    title: article.title,
+    error: error.message,
+    retryCount: article.retryCount
+  });
 }
 
 async function run() {
@@ -79,6 +94,7 @@ async function run() {
   }
 
   isPipelineRunning = true;
+  pipelineEmitter.emit(EVENTS.PIPELINE_START, { timestamp: new Date() });
   logger.info('Starting article pipeline...');
   let articleToPublish = null;
   
@@ -89,6 +105,10 @@ async function run() {
 
     if (articleToPublish) {
       logger.info(`Claimed recoverable article ${articleToPublish._id} for publishing.`);
+      pipelineEmitter.emit(EVENTS.ARTICLE_PUBLISHING, {
+        articleId: articleToPublish._id,
+        title: articleToPublish.title
+      });
     } else {
       logger.info('No recoverable articles found. Generating new article...');
       const generatedContent = await aiService.generateArticle();
@@ -102,6 +122,10 @@ async function run() {
       });
       await newArticle.save();
       logger.info(`New article generated and saved with status PENDING: ${newArticle._id}`);
+      pipelineEmitter.emit(EVENTS.ARTICLE_CREATED, {
+        articleId: newArticle._id,
+        title: newArticle.title
+      });
 
       articleToPublish = await claimArticleForPublishing({ _id: newArticle._id });
       if (!articleToPublish) {
@@ -109,6 +133,10 @@ async function run() {
         error.code = 'ARTICLE_CLAIM_FAILED';
         throw error;
       }
+      pipelineEmitter.emit(EVENTS.ARTICLE_PUBLISHING, {
+        articleId: articleToPublish._id,
+        title: articleToPublish.title
+      });
     }
 
     logger.info(`Publishing article ${articleToPublish._id} to Blogger...`);
@@ -133,6 +161,7 @@ async function run() {
     throw error;
   } finally {
     isPipelineRunning = false;
+    pipelineEmitter.emit(EVENTS.PIPELINE_END, { timestamp: new Date() });
   }
 }
 

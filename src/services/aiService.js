@@ -23,7 +23,7 @@ async function generateArticle() {
     logger.info('Fetching existing topics from database...');
     const existingArticles = await Article.find({}, 'topic')
       .sort({ createdAt: -1 })
-      .limit(50)
+      .limit(20)
       .exec();
     const existingTopics = existingArticles.map(a => a.topic).filter(Boolean);
 
@@ -36,8 +36,8 @@ I need a unique, engaging article about the following category: "${randomCategor
 Here are recently covered topics (do NOT repeat any of these topics. Generate a fresh, unique angle):
 ${existingTopics.length > 0 ? existingTopics.join(', ') : 'None so far.'}
 
-Write an engaging, SEO-optimized stock market article.
-It must be at least 800 words. Format the article body in proper HTML (use <h2>, <h3>, <p>, <ul>, etc. where appropriate).
+Write an engaging, SEO-optimized stock market article between 500 and 650 words.
+Keep it punchy, practical, and well-structured with proper HTML (use <h2>, <h3>, <p>, <ul>/<li> where appropriate).
 Ensure any double quotes inside HTML attributes are properly escaped so the output is valid JSON.
 
 Return ONLY a valid JSON object matching this schema:
@@ -65,7 +65,7 @@ Return ONLY a valid JSON object matching this schema:
               },
               content: {
                 type: 'string',
-                description: 'Complete article body in HTML, at least 800 words'
+                description: 'Complete article body in HTML, around 500-650 words'
               },
               tags: {
                 type: 'array',

@@ -1,7 +1,7 @@
 import React from 'react';
 import { formatUptime } from '../utils/formatters';
 
-export default function Navbar({ stats, isRefreshing, onManualRefresh, autoRefresh, onToggleAutoRefresh }) {
+export default function Navbar({ stats, isRefreshing, onManualRefresh, autoRefresh, onToggleAutoRefresh, isRealtimeConnected }) {
   const isBusy = stats?.isBusy;
 
   return (
@@ -32,9 +32,13 @@ export default function Navbar({ stats, isRefreshing, onManualRefresh, autoRefre
         <button
           className="refresh-control"
           onClick={onToggleAutoRefresh}
-          title={autoRefresh ? 'Click to pause 15s auto-polling' : 'Click to enable 15s auto-polling'}
+          title={autoRefresh ? 'Auto-refresh active (Server-Sent Events + fallback)' : 'Auto-refresh paused'}
         >
-          <span>{autoRefresh ? 'Live (15s)' : 'Paused'}</span>
+          <span
+            className={`status-dot ${autoRefresh ? (isRealtimeConnected ? 'idle' : 'busy') : 'error'}`}
+            style={{ width: 7, height: 7 }}
+          />
+          <span>{autoRefresh ? (isRealtimeConnected ? 'Live • Realtime' : 'Live (8s)') : 'Paused'}</span>
         </button>
 
         <button

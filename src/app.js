@@ -29,6 +29,15 @@ app.get('/', (req, res) => {
   });
 });
 
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/articles') || req.path === '/health') {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  next();
+});
+
 app.use(statusRoutes);
 app.use(articleRoutes);
 app.use(pipelineRoutes);

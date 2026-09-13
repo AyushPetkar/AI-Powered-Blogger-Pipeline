@@ -26,6 +26,7 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedArticle, setSelectedArticle] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
 
   const [toasts, setToasts] = useState([]);
 
@@ -82,18 +83,91 @@ export default function App() {
     }
   }, [statusFilter, searchTerm]);
 
-  // Initial load and auto-refresh effect
+  // Initial load
   useEffect(() => {
     loadData();
   }, [loadData]);
 
+  // Real-time Server-Sent Events (SSE) listener
+  useEffect(() => {
+    let eventSource = null;
+    let reconnectTimeout = null;
+
+    function connectSSE() {
+      try {
+        eventSource = new EventSource('/api/events');
+
+        eventSource.onopen = () => {
+          setIsRealtimeConnected(true);
+        };
+
+        eventSource.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (!data || data.type === 'connected') return;
+
+            // Instantly refresh dashboard data on any pipeline/article lifecycle event
+            loadData();
+
+            if (data.type === 'article:published') {
+              addToast(`Live Update: "${data.title || 'New Article'}" published to Blogger!`, 'success', 7000);
+            } else if (data.type === 'article:created') {
+              addToast(`Live Update: New article drafted ("${data.title || 'Article'}")`, 'info', 5000);
+            } else if (data.type === 'article:publishing') {
+              addToast(`Live Update: Publishing "${data.title || 'Article'}" to Blogger...`, 'info', 5000);
+            } else if (data.type === 'article:failed') {
+              addToast(`Live Update: Pipeline failure: ${data.error || 'Unknown error'}`, 'error', 7000);
+            }
+          } catch {
+            // keepalive or non-json message
+          }
+        };
+
+        eventSource.onerror = () => {
+          setIsRealtimeConnected(false);
+          eventSource.close();
+          // Attempt reconnection after 5s
+          reconnectTimeout = setTimeout(connectSSE, 5000);
+        };
+      } catch {
+        setIsRealtimeConnected(false);
+      }
+    }
+
+    connectSSE();
+
+    return () => {
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (eventSource) eventSource.close();
+    };
+  }, [loadData, addToast]);
+
+  // Trigger refresh on window focus / tab visibility change
+  useEffect(() => {
+    const handleFocusOrVisibility = () => {
+      if (!document.hidden) {
+        loadData();
+      }
+    };
+
+    window.addEventListener('focus', handleFocusOrVisibility);
+    document.addEventListener('visibilitychange', handleFocusOrVisibility);
+
+    return () => {
+      window.removeEventListener('focus', handleFocusOrVisibility);
+      document.removeEventListener('visibilitychange', handleFocusOrVisibility);
+    };
+  }, [loadData]);
+
+  // Fallback auto-refresh timer (fast 4s when pipeline is busy, 8s when idle)
   useEffect(() => {
     if (!autoRefresh) return;
+    const intervalMs = stats?.isBusy ? 4000 : 8000;
     const interval = setInterval(() => {
       loadData();
-    }, 15000);
+    }, intervalMs);
     return () => clearInterval(interval);
-  }, [autoRefresh, loadData]);
+  }, [autoRefresh, loadData, stats?.isBusy]);
 
   // Trigger New Article Generation & Publish
   const handleTrigger = async () => {
@@ -161,6 +235,7 @@ export default function App() {
         onManualRefresh={() => loadData(true)}
         autoRefresh={autoRefresh}
         onToggleAutoRefresh={() => setAutoRefresh((prev) => !prev)}
+        isRealtimeConnected={isRealtimeConnected}
       />
 
       {/* KPI Overview Grid */}
